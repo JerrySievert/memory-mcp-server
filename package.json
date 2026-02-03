@@ -1,0 +1,27 @@
+{
+  "name": "memory-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for LLM long-term memory storage and recall",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "bun run src/index.js",
+    "start:stdio": "bun run src/index.js --stdio",
+    "start:http": "bun run src/index.js --http",
+    "dev": "bun --watch run src/index.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "fastembed": "^1.14.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "mcp",
+    "memory",
+    "llm",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "MIT"
+}

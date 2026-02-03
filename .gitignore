@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Lock files
+bun.lock
+
+# Runtime data and indexes
+data/
+
+# ML model cache
+local_cache/
+
+# Claude IDE settings
+.claude/
+
+# macOS
+.DS_Store
+._*
+
+# Environment
+.env
+.env.*
