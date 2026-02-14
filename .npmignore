@@ -1,0 +1,26 @@
+# Development and documentation
+CLAUDE.md
+Notes.md
+Plan.md
+Specifications.md
+contexts/
+host/
+.github/
+
+# Tests
+src/**/*.test.js
+vitest.config.js
+src/test-client.js
+src/test-mcp-client.js
+
+# Data and caches
+data/
+local_cache/
+bun.lock
+
+# IDE and OS
+.claude/
+.DS_Store
+._*
+.env
+.env.*
