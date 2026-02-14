@@ -1,16 +1,16 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Memory Store CLI
  *
  * Command-line interface for managing memory stores.
  *
  * Usage:
- *   bun run src/cli.js stores                          # List all stores as ASCII tree
- *   bun run src/cli.js stores --json                   # List as JSON
- *   bun run src/cli.js stats [store_id]                # Show store statistics
- *   bun run src/cli.js snapshots [store_id]            # List named snapshots
- *   bun run src/cli.js fork --from <id> --note "text"  # Create a fork
- *   bun run src/cli.js verify [store_id]               # Verify store integrity
+ *   node src/cli.js stores                          # List all stores as ASCII tree
+ *   node src/cli.js stores --json                   # List as JSON
+ *   node src/cli.js stats [store_id]                # Show store statistics
+ *   node src/cli.js snapshots [store_id]            # List named snapshots
+ *   node src/cli.js fork --from <id> --note "text"  # Create a fork
+ *   node src/cli.js verify [store_id]               # Verify store integrity
  *
  * @module cli
  */
@@ -354,7 +354,7 @@ async function forkStore(sourceStoreId, options = {}) {
   if (!sourceStoreId) {
     console.error('Error: --from <store_id> is required');
     console.error(
-      'Usage: bun run src/cli.js fork --from <store_id> [--note "note text"]'
+      'Usage: node src/cli.js fork --from <store_id> [--note "note text"]'
     );
     process.exit(1);
   }
@@ -412,7 +412,7 @@ function printHelp() {
 Memory Store CLI
 
 Usage:
-  bun run src/cli.js <command> [options]
+  node src/cli.js <command> [options]
 
 Commands:
   stores                    List all stores as an ASCII tree (main + forks)
@@ -441,14 +441,14 @@ What are Snapshots?
   restore a store to a previously saved snapshot state.
 
 Examples:
-  bun run src/cli.js stores
-  bun run src/cli.js stores --json
-  bun run src/cli.js stats
-  bun run src/cli.js stats abc-123-def
-  bun run src/cli.js fork --from main --note "Testing new feature"
-  bun run src/cli.js fork --from abc123 --name "Dev Fork" --note "Development"
-  bun run src/cli.js snapshots main
-  bun run src/cli.js verify
+  node src/cli.js stores
+  node src/cli.js stores --json
+  node src/cli.js stats
+  node src/cli.js stats abc-123-def
+  node src/cli.js fork --from main --note "Testing new feature"
+  node src/cli.js fork --from abc123 --name "Dev Fork" --note "Development"
+  node src/cli.js snapshots main
+  node src/cli.js verify
 
 Environment Variables:
   DATA_DIR                  Data directory (default: ./data)
@@ -523,7 +523,7 @@ async function main() {
 
       default:
         console.error(`Unknown command: ${command}`);
-        console.error('Run "bun run src/cli.js help" for usage.');
+        console.error('Run "node src/cli.js help" for usage.');
         process.exit(1);
     }
   } catch (error) {

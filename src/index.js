@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Memory MCP Server - Main Entry Point
  *
@@ -6,10 +6,10 @@
  * Supports both stdio transport (for MCP clients) and HTTP transport.
  *
  * Usage:
- *   bun run src/index.js          # Start stdio server (default)
- *   bun run src/index.js --stdio  # Start only stdio server
- *   bun run src/index.js --http   # Start only HTTP server
- *   bun run src/index.js --http --port 8080  # HTTP on custom port
+ *   node src/index.js          # Start stdio server (default)
+ *   node src/index.js --stdio  # Start only stdio server
+ *   node src/index.js --http   # Start only HTTP server
+ *   node src/index.js --http --port 8080  # HTTP on custom port
  *
  * Environment Variables:
  *   DATA_DIR  - Directory for data storage (default: ./data)
@@ -22,7 +22,8 @@
 import {
   startStdioServer,
   startHttpMcpServer,
-  set_debug
+  set_debug,
+  set_server_options
 } from './mcp-server.js';
 import { startHttpServer } from './http-server.js';
 
@@ -41,7 +42,9 @@ function parseArgs() {
     debug: false,
     port: parseInt(process.env.PORT) || 3000,
     mcpPort: parseInt(process.env.MCP_PORT) || 3001,
-    host: process.env.HOST || 'localhost'
+    host: process.env.HOST || 'localhost',
+    store_id: null,
+    basic: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -63,6 +66,12 @@ function parseArgs() {
         break;
       case '--host':
         options.host = args[++i] || 'localhost';
+        break;
+      case '--store-id':
+        options.store_id = args[++i];
+        break;
+      case '--basic':
+        options.basic = true;
         break;
       case '--debug':
         options.debug = true;
@@ -91,7 +100,7 @@ function printHelp() {
 Memory MCP Server - LLM Long-term Memory Storage
 
 Usage:
-  bun run src/index.js [options]
+  node src/index.js [options]
 
 Options:
   --stdio               Start stdio server for MCP clients (default if no mode specified)
@@ -100,6 +109,11 @@ Options:
   --port <port>         REST HTTP server port (default: 3000, or PORT env var)
   --mcp-port <port>     MCP HTTP server port (default: 3001, or MCP_PORT env var)
   --host <host>         Server hostname (default: localhost, or HOST env var)
+  --store-id <id>       Lock all operations to this store/fork ID. Hides store_id
+                        parameter from LLM tool schemas.
+  --basic               Only expose basic memory tools (add, update, delete,
+                        retrieve, list, search). Hides forking, PITR, snapshots,
+                        and store management tools.
   --debug               Enable debug logging for MCP calls (outputs to stderr)
   --help, -h            Show this help message
 
@@ -110,11 +124,11 @@ Environment Variables:
   HOST                  Server hostname (default: localhost)
 
 Examples:
-  bun run src/index.js                      # Start stdio server (for Claude Desktop)
-  bun run src/index.js --http               # Start REST HTTP server on port 3000
-  bun run src/index.js --mcp-http           # Start MCP HTTP server on port 3001
-  bun run src/index.js --http --mcp-http    # Start both HTTP servers
-  bun run src/index.js --mcp-http --mcp-port 8080  # MCP HTTP on custom port
+  node src/index.js                      # Start stdio server (for Claude Desktop)
+  node src/index.js --http               # Start REST HTTP server on port 3000
+  node src/index.js --mcp-http           # Start MCP HTTP server on port 3001
+  node src/index.js --http --mcp-http    # Start both HTTP servers
+  node src/index.js --mcp-http --mcp-port 8080  # MCP HTTP on custom port
 
 MCP Configuration (claude_desktop_config.json):
 
@@ -122,8 +136,8 @@ MCP Configuration (claude_desktop_config.json):
   {
     "mcpServers": {
       "memory": {
-        "command": "bun",
-        "args": ["run", "/path/to/memory/src/index.js"]
+        "command": "node",
+        "args": ["/path/to/memory/src/index.js"]
       }
     }
   }
@@ -150,6 +164,21 @@ async function main() {
   if (options.debug) {
     set_debug(true);
     console.error('[DEBUG] Debug logging enabled for MCP calls');
+  }
+
+  // Set server options (store_id lock, basic mode)
+  set_server_options({
+    store_id: options.store_id,
+    basic: options.basic
+  });
+
+  if (options.store_id) {
+    console.error(`[CONFIG] Locked to store_id: ${options.store_id}`);
+  }
+  if (options.basic) {
+    console.error(
+      '[CONFIG] Basic mode enabled - only core memory tools exposed'
+    );
   }
 
   try {

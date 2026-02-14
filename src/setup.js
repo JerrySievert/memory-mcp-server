@@ -1,14 +1,14 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Memory Store Setup Script
  *
  * Creates a user-specific store (fork) and writes configuration to ~/.mcp/memory.json
  *
  * Usage:
- *   bun run src/setup.js                    # Interactive setup
- *   bun run src/setup.js --user jerry       # Create store for user "jerry"
- *   bun run src/setup.js --user jerry --reset  # Reset existing store
- *   bun run src/setup.js --show             # Show current configuration
+ *   node src/setup.js                    # Interactive setup
+ *   node src/setup.js --user jerry       # Create store for user "jerry"
+ *   node src/setup.js --user jerry --reset  # Reset existing store
+ *   node src/setup.js --show             # Show current configuration
  *
  * @module setup
  */
@@ -18,7 +18,11 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { createInterface } from 'readline';
 
-import { generateEmbedding, preloadModel } from './embeddings.js';
+import {
+  generateEmbedding,
+  preloadModel,
+  cleanup_embeddings
+} from './embeddings.js';
 import {
   setEmbedFunction,
   initStore,
@@ -117,7 +121,7 @@ function showConfig() {
   const config = readConfig();
   if (!config) {
     console.log('No configuration found at', CONFIG_FILE);
-    console.log('Run setup to create one: bun run src/setup.js');
+    console.log('Run setup to create one: node src/setup.js');
     return;
   }
 
@@ -192,7 +196,7 @@ async function createUserStore(userId, reset = false, note = null) {
   console.log(`  Config file: ${CONFIG_FILE}`);
   console.log('');
   console.log('You can now start the memory server:');
-  console.log('  bun run src/index.js --http');
+  console.log('  node src/index.js --http');
   console.log('');
 
   // Close the store
@@ -270,7 +274,7 @@ Memory Store Setup
 Creates a user-specific memory store and writes configuration to ~/.mcp/memory.json
 
 Usage:
-  bun run src/setup.js [options]
+  node src/setup.js [options]
 
 Options:
   --user, -u <name>   Username for the store
@@ -280,11 +284,11 @@ Options:
   --help, -h          Show this help message
 
 Examples:
-  bun run src/setup.js                              # Interactive setup
-  bun run src/setup.js --user jerry                 # Create store for "jerry"
-  bun run src/setup.js --user jerry -n "Personal"   # With a note
-  bun run src/setup.js --user jerry -r              # Reset jerry's store
-  bun run src/setup.js --show                       # Show current config
+  node src/setup.js                              # Interactive setup
+  node src/setup.js --user jerry                 # Create store for "jerry"
+  node src/setup.js --user jerry -n "Personal"   # With a note
+  node src/setup.js --user jerry -r              # Reset jerry's store
+  node src/setup.js --show                       # Show current config
 
 Configuration File:
   Location: ~/.mcp/memory.json
@@ -333,11 +337,13 @@ async function main() {
   } catch (error) {
     console.error('Setup failed:', error.message);
     closeReadlineInterface();
-    process.exit(1);
+    cleanup_embeddings();
+    process.exitCode = 1;
+    return;
   }
 
   closeReadlineInterface();
-  process.exit(0);
+  cleanup_embeddings();
 }
 
 main();

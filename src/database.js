@@ -2,12 +2,12 @@
  * Database Module
  *
  * Handles SQLite database initialization, connection management, and schema setup.
- * Uses Bun's built-in SQLite support for high performance.
+ * Uses better-sqlite3 for high performance synchronous access.
  *
  * @module database
  */
 
-import { Database } from 'bun:sqlite';
+import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 
@@ -21,7 +21,8 @@ let db = null;
  * @returns {string} Full path to the SQLite database file
  */
 function getDatabasePath() {
-  const dataDir = process.env.DATA_DIR || join(import.meta.dir, '..', 'data');
+  const dataDir =
+    process.env.DATA_DIR || join(import.meta.dirname, '..', 'data');
   // Ensure data directory exists
   try {
     mkdirSync(dataDir, { recursive: true });
@@ -45,14 +46,14 @@ export function initDatabase() {
   }
 
   const dbPath = getDatabasePath();
-  db = new Database(dbPath, { create: true });
+  db = new Database(dbPath);
 
   // Enable WAL mode for better concurrent access
-  db.run('PRAGMA journal_mode = WAL');
-  db.run('PRAGMA foreign_keys = ON');
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   // Create memories table
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category TEXT NOT NULL,
@@ -72,7 +73,7 @@ export function initDatabase() {
   `);
 
   // Create relationships table
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS relationships (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       memory_id INTEGER NOT NULL,
@@ -86,7 +87,7 @@ export function initDatabase() {
   `);
 
   // Create merge history table for tracking merged memories
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS merge_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       resulting_memory_id INTEGER NOT NULL,
@@ -98,7 +99,7 @@ export function initDatabase() {
   `);
 
   // Create FTS5 virtual table for full-text search
-  db.run(`
+  db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content,
       category,
@@ -111,21 +112,21 @@ export function initDatabase() {
   `);
 
   // Create triggers to keep FTS index in sync
-  db.run(`
+  db.exec(`
     CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
       INSERT INTO memories_fts(rowid, content, category, type, tags, context)
       VALUES (new.id, new.content, new.category, new.type, new.tags, new.context);
     END
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
       INSERT INTO memories_fts(memories_fts, rowid, content, category, type, tags, context)
       VALUES ('delete', old.id, old.content, old.category, old.type, old.tags, old.context);
     END
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
       INSERT INTO memories_fts(memories_fts, rowid, content, category, type, tags, context)
       VALUES ('delete', old.id, old.content, old.category, old.type, old.tags, old.context);
@@ -135,26 +136,26 @@ export function initDatabase() {
   `);
 
   // Create indexes for common queries
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)'
   );
-  db.run('CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)');
-  db.run(
+  db.exec('CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)');
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived)'
   );
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_memories_cadence ON memories(cadence_type, cadence_value)'
   );
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance)'
   );
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed)'
   );
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_relationships_memory ON relationships(memory_id)'
   );
-  db.run(
+  db.exec(
     'CREATE INDEX IF NOT EXISTS idx_relationships_related ON relationships(related_memory_id)'
   );
 

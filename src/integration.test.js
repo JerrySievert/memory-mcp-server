@@ -4,7 +4,7 @@
  * Tests the integration between the new store and MCP/HTTP servers.
  */
 
-import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -861,5 +861,271 @@ describe('Fork Isolation - End to End', () => {
 
     // Clean up
     await adapter.deleteFork(fork.id);
+  });
+});
+
+// =============================================================================
+// Server Options Tests (--store-id, --basic)
+// =============================================================================
+
+describe('Server Options - Basic Mode', () => {
+  let mcp_module;
+
+  beforeAll(async () => {
+    mcp_module = (await import('./mcp-server.js')).default;
+  });
+
+  test('default mode returns all tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: false });
+    const tools = mcp_module.build_tool_list();
+    expect(tools.length).toBe(mcp_module.TOOLS.length);
+  });
+
+  test('basic mode returns only core tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+
+    expect(tools.length).toBe(11);
+
+    const names = tools.map((t) => t.name).sort();
+    expect(names).toEqual([
+      'add_memory',
+      'add_relationship',
+      'delete_memory',
+      'get_due_memories',
+      'get_memory',
+      'get_related_memories',
+      'get_relationships',
+      'list_memories',
+      'remove_relationship',
+      'search_memories',
+      'update_memory'
+    ]);
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode excludes fork tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).not.toContain('create_fork');
+    expect(names).not.toContain('create_fork_at_time');
+    expect(names).not.toContain('list_forks');
+    expect(names).not.toContain('delete_fork');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode excludes snapshot tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).not.toContain('create_snapshot');
+    expect(names).not.toContain('list_snapshots');
+    expect(names).not.toContain('restore_snapshot');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode excludes store management tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).not.toContain('get_store_snapshot');
+    expect(names).not.toContain('verify_integrity');
+    expect(names).not.toContain('rebuild_indexes');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode includes relationship tools', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain('add_relationship');
+    expect(names).toContain('remove_relationship');
+    expect(names).toContain('get_relationships');
+    expect(names).toContain('get_related_memories');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode includes get_due_memories', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).toContain('get_due_memories');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('basic mode excludes stats tool', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const tools = mcp_module.build_tool_list();
+    const names = tools.map((t) => t.name);
+
+    expect(names).not.toContain('get_stats');
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+});
+
+describe('Server Options - Store ID Lock', () => {
+  let mcp_module;
+
+  beforeAll(async () => {
+    mcp_module = (await import('./mcp-server.js')).default;
+  });
+
+  test('store_id lock removes store_id from all tool schemas', () => {
+    mcp_module.set_server_options({ store_id: 'locked-store', basic: false });
+    const tools = mcp_module.build_tool_list();
+
+    for (const tool of tools) {
+      const props = tool.inputSchema?.properties || {};
+      expect(props.store_id).toBeUndefined();
+    }
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('store_id lock removes source_store_id from fork tool schemas', () => {
+    mcp_module.set_server_options({ store_id: 'locked-store', basic: false });
+    const tools = mcp_module.build_tool_list();
+
+    const create_fork = tools.find((t) => t.name === 'create_fork');
+    const create_fork_at_time = tools.find(
+      (t) => t.name === 'create_fork_at_time'
+    );
+
+    expect(create_fork.inputSchema.properties.source_store_id).toBeUndefined();
+    expect(
+      create_fork_at_time.inputSchema.properties.source_store_id
+    ).toBeUndefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('store_id lock does not mutate original TOOLS array', () => {
+    // Verify originals have store_id
+    const original_add = mcp_module.TOOLS.find((t) => t.name === 'add_memory');
+    expect(original_add.inputSchema.properties.store_id).toBeDefined();
+
+    const original_fork = mcp_module.TOOLS.find(
+      (t) => t.name === 'create_fork'
+    );
+    expect(original_fork.inputSchema.properties.source_store_id).toBeDefined();
+
+    // Apply lock
+    mcp_module.set_server_options({ store_id: 'locked-store', basic: false });
+    mcp_module.build_tool_list();
+
+    // Verify originals are still intact
+    expect(original_add.inputSchema.properties.store_id).toBeDefined();
+    expect(original_fork.inputSchema.properties.source_store_id).toBeDefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('without store_id lock, store_id properties are preserved', () => {
+    mcp_module.set_server_options({ store_id: null, basic: false });
+    const tools = mcp_module.build_tool_list();
+
+    const add_memory = tools.find((t) => t.name === 'add_memory');
+    expect(add_memory.inputSchema.properties.store_id).toBeDefined();
+    expect(add_memory.inputSchema.properties.store_id.type).toBe('string');
+
+    const create_fork = tools.find((t) => t.name === 'create_fork');
+    expect(create_fork.inputSchema.properties.source_store_id).toBeDefined();
+  });
+
+  test('store_id lock preserves other tool properties', () => {
+    mcp_module.set_server_options({ store_id: 'locked-store', basic: false });
+    const tools = mcp_module.build_tool_list();
+
+    const add_memory = tools.find((t) => t.name === 'add_memory');
+    // Should still have all other properties
+    expect(add_memory.inputSchema.properties.category).toBeDefined();
+    expect(add_memory.inputSchema.properties.type).toBeDefined();
+    expect(add_memory.inputSchema.properties.content).toBeDefined();
+    expect(add_memory.inputSchema.properties.tags).toBeDefined();
+    expect(add_memory.inputSchema.properties.importance).toBeDefined();
+    // But not store_id
+    expect(add_memory.inputSchema.properties.store_id).toBeUndefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+});
+
+describe('Server Options - Combined Modes', () => {
+  let mcp_module;
+
+  beforeAll(async () => {
+    mcp_module = (await import('./mcp-server.js')).default;
+  });
+
+  test('basic + store_id lock returns 11 tools without store_id', () => {
+    mcp_module.set_server_options({ store_id: 'my-fork', basic: true });
+    const tools = mcp_module.build_tool_list();
+
+    // Should have exactly 11 tools
+    expect(tools.length).toBe(11);
+
+    // None should have store_id
+    for (const tool of tools) {
+      const props = tool.inputSchema?.properties || {};
+      expect(props.store_id).toBeUndefined();
+      expect(props.source_store_id).toBeUndefined();
+    }
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('createMCPServer works with basic mode', () => {
+    mcp_module.set_server_options({ store_id: null, basic: true });
+    const server = mcp_module.createMCPServer();
+    expect(server).toBeDefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('createMCPServer works with store_id lock', () => {
+    mcp_module.set_server_options({
+      store_id: 'test-locked',
+      basic: false
+    });
+    const server = mcp_module.createMCPServer();
+    expect(server).toBeDefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
+  });
+
+  test('createMCPServer works with both options combined', () => {
+    mcp_module.set_server_options({ store_id: 'test-locked', basic: true });
+    const server = mcp_module.createMCPServer();
+    expect(server).toBeDefined();
+
+    // Reset
+    mcp_module.set_server_options({ store_id: null, basic: false });
   });
 });

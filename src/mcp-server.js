@@ -8,13 +8,52 @@
  * @module mcp-server
  */
 
+import { createServer as create_http_server } from 'node:http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Server options set via CLI arguments
+ */
+let server_options = {
+  store_id: null, // When set, lock all operations to this store_id
+  basic: false // When true, only expose basic memory tools
+};
+
+/**
+ * Set server options (called from index.js before server creation)
+ * @param {Object} options
+ * @param {string|null} options.store_id - Lock to this store_id
+ * @param {boolean} options.basic - Enable basic mode
+ */
+export function set_server_options(options) {
+  if (options.store_id !== undefined)
+    server_options.store_id = options.store_id;
+  if (options.basic !== undefined) server_options.basic = options.basic;
+}
+
+/**
+ * Tool names exposed in basic mode.
+ * Core memory CRUD, search, relationships, and cadence.
+ */
+const BASIC_TOOL_NAMES = new Set([
+  'add_memory',
+  'update_memory',
+  'delete_memory',
+  'get_memory',
+  'list_memories',
+  'search_memories',
+  'add_relationship',
+  'remove_relationship',
+  'get_relationships',
+  'get_related_memories',
+  'get_due_memories'
+]);
 
 /**
  * Debug logging configuration
@@ -630,6 +669,51 @@ const TOOLS = [
 ];
 
 /**
+ * Build the filtered tool list based on server options.
+ * - In basic mode, only include BASIC_TOOL_NAMES
+ * - When store_id is locked, remove store_id from all tool schemas
+ *
+ * @returns {Array} Filtered tool definitions
+ */
+function build_tool_list() {
+  let tools = TOOLS;
+
+  // Filter to basic tools if basic mode is enabled
+  if (server_options.basic) {
+    tools = tools.filter((tool) => BASIC_TOOL_NAMES.has(tool.name));
+  }
+
+  // Strip store_id from schemas when a fixed store_id is configured
+  if (server_options.store_id) {
+    tools = tools.map((tool) => {
+      const schema = tool.inputSchema;
+      if (
+        !schema?.properties?.store_id &&
+        !schema?.properties?.source_store_id
+      ) {
+        return tool;
+      }
+
+      // Deep clone the tool to avoid mutating the original
+      const filtered_tool = {
+        ...tool,
+        inputSchema: {
+          ...schema,
+          properties: { ...schema.properties }
+        }
+      };
+
+      delete filtered_tool.inputSchema.properties.store_id;
+      delete filtered_tool.inputSchema.properties.source_store_id;
+
+      return filtered_tool;
+    });
+  }
+
+  return tools;
+}
+
+/**
  * Handle tool execution requests.
  * Routes to appropriate handler based on tool name.
  *
@@ -638,7 +722,8 @@ const TOOLS = [
  * @returns {Promise<Object>} Tool execution result
  */
 async function handleToolCall(name, args) {
-  const storeId = args.store_id || 'main';
+  // When store_id is locked via CLI, always use it regardless of what the LLM sends
+  const storeId = server_options.store_id || args.store_id || 'main';
 
   debug_log('TOOL_CALL', `Executing: ${name} [store: ${storeId}]`);
 
@@ -716,13 +801,14 @@ async function handleToolCall(name, args) {
 
     // Fork operations
     case 'create_fork':
-      return await createFork(args.source_store_id || 'main', {
-        name: args.name
-      });
+      return await createFork(
+        server_options.store_id || args.source_store_id || 'main',
+        { name: args.name }
+      );
 
     case 'create_fork_at_time':
       return await createForkAtTime(
-        args.source_store_id || 'main',
+        server_options.store_id || args.source_store_id || 'main',
         args.timestamp,
         { name: args.name }
       );
@@ -778,10 +864,11 @@ export function createMCPServer() {
   );
 
   // Handle list tools request
+  const filtered_tools = build_tool_list();
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     debug_log('REQUEST', 'ListTools request received');
-    debug_log('RESULT', `Returning ${TOOLS.length} tools`);
-    return { tools: TOOLS };
+    debug_log('RESULT', `Returning ${filtered_tools.length} tools`);
+    return { tools: filtered_tools };
   });
 
   // Handle tool calls
@@ -895,189 +982,110 @@ export async function startHttpMcpServer(options = {}) {
   // Track active transports by session ID
   const transports = new Map();
 
-  // Create HTTP server using Bun
-  const httpServer = Bun.serve({
-    port,
-    hostname,
-    idleTimeout: 255, // Max timeout in seconds for long-lived MCP connections
-    async fetch(req) {
-      const url = new URL(req.url);
+  /**
+   * Get or create a transport for the given session ID.
+   * @param {string} session_id
+   * @returns {StreamableHTTPServerTransport}
+   */
+  function get_or_create_transport(session_id) {
+    let transport = transports.get(session_id);
+    if (!transport) {
+      debug_log(
+        'SESSION',
+        `Creating new transport for session ${session_id.slice(0, 8)}...`
+      );
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => session_id,
+        onsessioninitialized: (id) => {
+          debug_log('SESSION', `Session initialized: ${id}`);
+          console.error(`MCP session initialized: ${id}`);
+        }
+      });
+      transports.set(session_id, transport);
 
-      // Handle CORS preflight
-      if (req.method === 'OPTIONS') {
-        return new Response(null, {
-          status: 204,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, mcp-session-id'
-          }
-        });
-      }
+      server.connect(transport).catch((err) => {
+        debug_log('ERROR', `Failed to connect transport: ${err.message}`);
+        console.error('Failed to connect transport:', err);
+      });
+    }
+    return transport;
+  }
 
-      // MCP endpoint
-      if (url.pathname === '/mcp') {
-        // Get or create session ID
-        const sessionId =
-          req.headers.get('mcp-session-id') || crypto.randomUUID();
+  // Create HTTP server using Node.js
+  const httpServer = create_http_server(async (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
+    // CORS headers for all responses
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'mcp-session-id');
+
+    // Handle CORS preflight
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, mcp-session-id'
+      });
+      res.end();
+      return;
+    }
+
+    // MCP endpoint - delegate to StreamableHTTPServerTransport
+    if (url.pathname === '/mcp') {
+      const session_id = req.headers['mcp-session-id'] || crypto.randomUUID();
+
+      debug_log(
+        'HTTP',
+        `${req.method} /mcp - Session: ${session_id.slice(0, 8)}...`
+      );
+
+      if (req.method === 'DELETE') {
         debug_log(
-          'HTTP',
-          `${req.method} /mcp - Session: ${sessionId.slice(0, 8)}...`
+          'SESSION',
+          `Terminating session ${session_id.slice(0, 8)}...`
         );
-
-        // Handle different methods
-        if (req.method === 'GET') {
-          // SSE connection for server-to-client messages
-          let transport = transports.get(sessionId);
-
-          if (!transport) {
-            // Create new transport for this session
-            debug_log(
-              'SESSION',
-              `Creating new transport for session ${sessionId.slice(0, 8)}...`
-            );
-            transport = new WebStandardStreamableHTTPServerTransport({
-              sessionIdGenerator: () => sessionId,
-              onsessioninitialized: (id) => {
-                debug_log('SESSION', `Session initialized: ${id}`);
-                console.error(`MCP session initialized: ${id}`);
-              }
-            });
-            transports.set(sessionId, transport);
-
-            // Connect server to transport
-            server.connect(transport).catch((err) => {
-              debug_log('ERROR', `Failed to connect transport: ${err.message}`);
-              console.error('Failed to connect transport:', err);
-            });
-          }
-
-          // Handle the SSE request
-          const response = await transport.handleRequest(req);
-          // Add session ID header to response
-          response.headers.set('mcp-session-id', sessionId);
-          response.headers.set('Access-Control-Allow-Origin', '*');
-          response.headers.set(
-            'Access-Control-Expose-Headers',
-            'mcp-session-id'
-          );
-          return response;
-        } else if (req.method === 'POST') {
-          // Client-to-server messages
-          let transport = transports.get(sessionId);
-
-          if (!transport) {
-            // Create new transport for this session
-            debug_log(
-              'SESSION',
-              `Creating new transport for POST session ${sessionId.slice(0, 8)}...`
-            );
-            transport = new WebStandardStreamableHTTPServerTransport({
-              sessionIdGenerator: () => sessionId,
-              onsessioninitialized: (id) => {
-                debug_log('SESSION', `Session initialized: ${id}`);
-                console.error(`MCP session initialized: ${id}`);
-              }
-            });
-            transports.set(sessionId, transport);
-
-            // Connect server to transport
-            await server.connect(transport);
-          }
-
-          // Clone request to read body for debugging without consuming it
-          let request_to_handle = req;
-          if (debug_enabled) {
-            const body_text = await req.text();
-            try {
-              const body_json = JSON.parse(body_text);
-              debug_log(
-                'HTTP_REQUEST',
-                `POST /mcp [session: ${sessionId.slice(0, 8)}...]`,
-                {
-                  method: body_json.method,
-                  id: body_json.id,
-                  params: body_json.params
-                }
-              );
-            } catch {
-              debug_log(
-                'HTTP_REQUEST',
-                `POST /mcp [session: ${sessionId.slice(0, 8)}...] - Raw body: ${body_text.slice(0, 200)}`
-              );
-            }
-            // Reconstruct request with the body we consumed
-            request_to_handle = new Request(req.url, {
-              method: req.method,
-              headers: req.headers,
-              body: body_text
-            });
-          }
-
-          // Handle the POST request
-          const response = await transport.handleRequest(request_to_handle);
-          // Add session ID header to response
-          response.headers.set('mcp-session-id', sessionId);
-          response.headers.set('Access-Control-Allow-Origin', '*');
-          response.headers.set(
-            'Access-Control-Expose-Headers',
-            'mcp-session-id'
-          );
-          return response;
-        } else if (req.method === 'DELETE') {
-          // Session termination
+        const transport = transports.get(session_id);
+        if (transport) {
+          await transport.close();
+          transports.delete(session_id);
           debug_log(
             'SESSION',
-            `Terminating session ${sessionId.slice(0, 8)}...`
+            `Session ${session_id.slice(0, 8)}... closed and removed`
           );
-          const transport = transports.get(sessionId);
-          if (transport) {
-            await transport.close();
-            transports.delete(sessionId);
-            debug_log(
-              'SESSION',
-              `Session ${sessionId.slice(0, 8)}... closed and removed`
-            );
-          } else {
-            debug_log(
-              'SESSION',
-              `Session ${sessionId.slice(0, 8)}... not found for deletion`
-            );
-          }
-          return new Response(null, {
-            status: 204,
-            headers: {
-              'Access-Control-Allow-Origin': '*'
-            }
-          });
         }
+        res.writeHead(204);
+        res.end();
+        return;
       }
 
-      // Health check endpoint
-      if (url.pathname === '/health') {
-        return new Response(
-          JSON.stringify({
-            status: 'ok',
-            service: 'memory-mcp-server',
-            version: '2.0.0',
-            transport: 'streamable-http',
-            sessions: transports.size
-          }),
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*'
-            }
-          }
-        );
-      }
-
-      return new Response('Not Found', { status: 404 });
+      // GET and POST are handled by the transport directly
+      const transport = get_or_create_transport(session_id);
+      await transport.handleRequest(req, res);
+      return;
     }
+
+    // Health check endpoint
+    if (url.pathname === '/health') {
+      const body = JSON.stringify({
+        status: 'ok',
+        service: 'memory-mcp-server',
+        version: '2.0.0',
+        transport: 'streamable-http',
+        sessions: transports.size
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(body);
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
   });
 
-  console.error(`MCP HTTP server listening on http://${hostname}:${port}/mcp`);
+  httpServer.listen(port, hostname, () => {
+    console.error(
+      `MCP HTTP server listening on http://${hostname}:${port}/mcp`
+    );
+  });
 
   return httpServer;
 }
@@ -1086,5 +1094,7 @@ export default {
   createMCPServer,
   startStdioServer,
   startHttpMcpServer,
+  set_server_options,
+  build_tool_list,
   TOOLS
 };

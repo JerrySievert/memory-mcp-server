@@ -215,6 +215,19 @@ export async function preloadModel() {
   await getEmbeddingModel();
 }
 
+/**
+ * Release the embedding model to allow clean process exit.
+ * Fastembed's ONNX runtime spawns native threads that cause crashes
+ * if process.exit() is called while they're still running.
+ * Nullifying the reference allows the event loop to drain and the
+ * process to exit naturally without triggering native mutex errors.
+ *
+ * @returns {void}
+ */
+export function cleanup_embeddings() {
+  embeddingModel = null;
+}
+
 export default {
   generateEmbedding,
   generateEmbeddings,
@@ -223,5 +236,6 @@ export default {
   bufferToEmbedding,
   findSimilar,
   preloadModel,
+  cleanup_embeddings,
   EMBEDDING_DIMENSION
 };

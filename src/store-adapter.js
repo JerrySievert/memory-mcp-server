@@ -34,7 +34,8 @@ export async function initStore() {
     return store;
   }
 
-  const dataDir = process.env.DATA_DIR || join(import.meta.dir, '..', 'data');
+  const dataDir =
+    process.env.DATA_DIR || join(import.meta.dirname, '..', 'data');
 
   store = await createMemoryStore({
     config: { dataDir },

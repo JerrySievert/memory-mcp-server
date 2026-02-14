@@ -18,7 +18,7 @@ import {
   afterAll,
   beforeEach,
   afterEach
-} from 'bun:test';
+} from 'vitest';
 import { existsSync, mkdirSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 
@@ -55,7 +55,7 @@ import { TextIndex, tokenize, removeStopWords } from './text-index.js';
 import { MemoryStore, createMemoryStore } from './memory-store.js';
 
 // Test directory
-const TEST_DIR = join(import.meta.dir, '..', '..', 'data', 'test-store');
+const TEST_DIR = join(import.meta.dirname, '..', '..', 'data', 'test-store');
 
 // Cleanup helper
 function cleanupTestDir() {

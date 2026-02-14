@@ -1,12 +1,12 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Test Client for MCP HTTP Interface
  *
  * Tests the MCP protocol over HTTP by making tool calls and observing debug output.
- * Run with: bun run src/test-mcp-client.js
+ * Run with: node src/test-mcp-client.js
  *
  * Make sure the MCP HTTP server is running with --debug:
- *   bun run src/index.js --mcp-http --debug
+ *   node src/index.js --mcp-http --debug
  */
 
 const MCP_URL = process.env.MCP_URL || 'http://localhost:3001/mcp';

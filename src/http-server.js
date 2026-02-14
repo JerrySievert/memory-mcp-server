@@ -6,11 +6,12 @@
  * authentication middleware in the future.
  *
  * All endpoints accept and return JSON.
- * Uses Bun's built-in HTTP server for high performance.
+ * Uses Node.js HTTP server with Web Standard Request/Response adapter.
  *
  * @module http-server
  */
 
+import { create_server } from './node-http-adapter.js';
 import { generateEmbedding, preloadModel } from './embeddings.js';
 import {
   initStore,
@@ -1455,12 +1456,8 @@ export async function startHttpServer(options = {}) {
   await initStore();
   console.log('Memory server ready.');
 
-  // Start server using Bun.serve
-  const server = Bun.serve({
-    port,
-    hostname,
-    fetch: handleRequest
-  });
+  // Start server
+  const server = await create_server(handleRequest, { port, hostname });
 
   console.log(`HTTP server listening on http://${hostname}:${port}`);
 

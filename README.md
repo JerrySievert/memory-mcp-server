@@ -80,12 +80,12 @@ A high-performance, append-only memory storage system for LLMs with semantic sea
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) v1.0 or later
+- [Node.js](https://nodejs.org/) v21.2 or later
 
 ### Install Dependencies
 
 ```bash
-bun install
+npm install
 ```
 
 ## Initial Setup
@@ -95,7 +95,7 @@ Before using the memory server, run the setup script to create your user store:
 ### Interactive Setup
 
 ```bash
-bun run src/setup.js
+node src/setup.js
 ```
 
 This will prompt for your username and create:
@@ -107,13 +107,13 @@ This will prompt for your username and create:
 
 ```bash
 # Create store for a specific user
-bun run src/setup.js --user jerry
+node src/setup.js --user jerry
 
 # Reset an existing user's store
-bun run src/setup.js --user jerry --reset
+node src/setup.js --user jerry --reset
 
 # Show current configuration
-bun run src/setup.js --show
+node src/setup.js --show
 ```
 
 ### Configuration File
@@ -157,7 +157,7 @@ The setup creates `~/.mcp/memory.json`:
 ### List Stores
 
 ```bash
-bun run src/cli.js stores
+node src/cli.js stores
 ```
 
 Output (ASCII tree view showing fork hierarchy):
@@ -186,26 +186,26 @@ Total: 5 store(s)
 
 ```bash
 # Create store with a note
-bun run src/setup.js --user jerry --note "Personal memory store"
+node src/setup.js --user jerry --note "Personal memory store"
 
 # Interactive mode also prompts for a note
-bun run src/setup.js
+node src/setup.js
 ```
 
 ### Other CLI Commands
 
 ```bash
 # Show store statistics
-bun run src/cli.js stats [store_id]
+node src/cli.js stats [store_id]
 
 # List snapshots for a store
-bun run src/cli.js snapshots [store_id]
+node src/cli.js snapshots [store_id]
 
 # Verify store integrity
-bun run src/cli.js verify [store_id]
+node src/cli.js verify [store_id]
 
 # Output as JSON
-bun run src/cli.js stores --json
+node src/cli.js stores --json
 ```
 
 ---
@@ -215,17 +215,17 @@ bun run src/cli.js stores --json
 ### MCP Server (stdio transport)
 
 ```bash
-bun run src/index.js
+node src/index.js
 # or explicitly:
-bun run src/index.js --stdio
+node src/index.js --stdio
 ```
 
 ### REST HTTP Server
 
 ```bash
-bun run src/index.js --http
+node src/index.js --http
 # or with custom port:
-bun run src/index.js --http --port 8080
+node src/index.js --http --port 8080
 ```
 
 The REST HTTP server runs on `http://localhost:3000` by default. It provides a standard REST API and a debug UI at `/debug`.
@@ -233,9 +233,9 @@ The REST HTTP server runs on `http://localhost:3000` by default. It provides a s
 ### MCP HTTP Server (Streamable HTTP)
 
 ```bash
-bun run src/index.js --mcp-http
+node src/index.js --mcp-http
 # or with custom port:
-bun run src/index.js --mcp-http --mcp-port 8080
+node src/index.js --mcp-http --mcp-port 8080
 ```
 
 The MCP HTTP server runs on `http://localhost:3001/mcp` by default. It uses the [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) for MCP clients that connect over the network instead of stdio.
@@ -256,27 +256,29 @@ MCP client configuration for HTTP transport:
 
 ```bash
 # stdio + REST HTTP
-bun run src/index.js --stdio --http
+node src/index.js --stdio --http
 
 # REST HTTP + MCP HTTP
-bun run src/index.js --http --mcp-http
+node src/index.js --http --mcp-http
 
 # All three
-bun run src/index.js --stdio --http --mcp-http
+node src/index.js --stdio --http --mcp-http
 ```
 
 ### Command Line Options
 
-| Option              | Description                                                       |
-| ------------------- | ----------------------------------------------------------------- |
-| `--stdio`           | Start stdio server for MCP clients (default if no mode specified) |
-| `--http`            | Start REST HTTP server                                            |
-| `--mcp-http`        | Start MCP server with Streamable HTTP transport                   |
-| `--port <port>`     | REST HTTP server port (default: 3000)                             |
-| `--mcp-port <port>` | MCP HTTP server port (default: 3001)                              |
-| `--host <host>`     | Server hostname (default: localhost)                              |
-| `--debug`           | Enable debug logging for MCP calls (outputs to stderr)            |
-| `--help, -h`        | Show help message                                                 |
+| Option              | Description                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `--stdio`           | Start stdio server for MCP clients (default if no mode specified)                   |
+| `--http`            | Start REST HTTP server                                                              |
+| `--mcp-http`        | Start MCP server with Streamable HTTP transport                                     |
+| `--port <port>`     | REST HTTP server port (default: 3000)                                               |
+| `--mcp-port <port>` | MCP HTTP server port (default: 3001)                                                |
+| `--host <host>`     | Server hostname (default: localhost)                                                |
+| `--store-id <id>`   | Lock all operations to a specific store/fork ID (see [Server Modes](#server-modes)) |
+| `--basic`           | Only expose basic memory tools (see [Server Modes](#server-modes))                  |
+| `--debug`           | Enable debug logging for MCP calls (outputs to stderr)                              |
+| `--help, -h`        | Show help message                                                                   |
 
 ### Environment Variables
 
@@ -287,35 +289,120 @@ bun run src/index.js --stdio --http --mcp-http
 | `MCP_PORT` | `3001`      | MCP HTTP server port           |
 | `HOST`     | `localhost` | Server hostname                |
 
+## Server Modes
+
+### Basic Mode (`--basic`)
+
+When `--basic` is enabled, the MCP server only exposes the core memory tools to the LLM:
+
+| Tool                   | Description                                     |
+| ---------------------- | ----------------------------------------------- |
+| `add_memory`           | Create a new memory with automatic embedding    |
+| `get_memory`           | Retrieve a memory by ID                         |
+| `update_memory`        | Update an existing memory (creates new version) |
+| `delete_memory`        | Archive a memory (soft delete)                  |
+| `list_memories`        | List memories with filters and pagination       |
+| `search_memories`      | Search using semantic, text, or hybrid mode     |
+| `add_relationship`     | Create a relationship between memories          |
+| `remove_relationship`  | Remove a relationship                           |
+| `get_relationships`    | Get all relationships for a memory              |
+| `get_related_memories` | Traverse relationship graph                     |
+| `get_due_memories`     | Get memories due for review                     |
+
+All other tools (forking, PITR, snapshots, store management, stats) are hidden from the LLM. This is useful when you want a simpler interface without advanced features.
+
+```bash
+node src/index.js --basic
+```
+
+### Store ID Lock (`--store-id`)
+
+When `--store-id` is provided, all operations are locked to the specified store/fork ID. The `store_id` parameter is removed from all tool schemas so the LLM never sees or needs to specify it.
+
+```bash
+# Lock to a specific user fork
+node src/index.js --store-id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+This is useful when:
+
+- Each user has their own fork and you want the LLM to only operate on that fork
+- You want to prevent the LLM from accidentally reading/writing to the wrong store
+- Simplifying the tool interface by removing an unnecessary parameter
+
+### Combining Modes
+
+Both options can be combined for a minimal, locked-down configuration:
+
+```bash
+# Simple interface locked to a specific user store
+node src/index.js --store-id "user-fork-uuid" --basic
+```
+
+### MCP Configuration Examples
+
+Standard configuration (all tools, LLM chooses store):
+
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "node",
+      "args": ["/path/to/memory/src/index.js"]
+    }
+  }
+}
+```
+
+Locked to a user fork with basic tools only:
+
+```json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "node",
+      "args": [
+        "/path/to/memory/src/index.js",
+        "--store-id",
+        "user-fork-uuid",
+        "--basic"
+      ]
+    }
+  }
+}
+```
+
+---
+
 ## Testing
 
 ### Run All Tests
 
 ```bash
-bun test
+npx vitest run
 ```
 
 ### Run Specific Test Files
 
 ```bash
 # Core store tests (150 tests)
-bun test src/store/store.test.js
+npx vitest run src/store/store.test.js
 
-# Integration tests (26 tests)
-bun test src/integration.test.js
+# Integration tests (43 tests)
+npx vitest run src/integration.test.js
 
-# Legacy memory tests (44 tests)
-bun test src/memory.test.js
+# Memory tests (44 tests)
+npx vitest run src/memory.test.js
 ```
 
 ### Test Coverage
 
-| Test Suite  | Tests   | Description                                        |
-| ----------- | ------- | -------------------------------------------------- |
-| Store Core  | 150     | WAL, segments, indexes, merkle tree, forking, PITR |
-| Integration | 26      | End-to-end API tests, fork isolation               |
-| Legacy      | 44      | Original memory/search/relationship tests          |
-| **Total**   | **220** |                                                    |
+| Test Suite  | Tests   | Description                                          |
+| ----------- | ------- | ---------------------------------------------------- |
+| Store Core  | 150     | WAL, segments, indexes, merkle tree, forking, PITR   |
+| Integration | 43      | End-to-end API tests, fork isolation, server options |
+| Memory      | 44      | Memory/search/relationship tests                     |
+| **Total**   | **237** |                                                      |
 
 ## API Reference
 
@@ -610,8 +697,8 @@ curl -X POST "http://localhost:3000/memories?store_id=abc-123" \
 {
   "mcpServers": {
     "memory": {
-      "command": "bun",
-      "args": ["run", "/path/to/memory/src/index.js"],
+      "command": "node",
+      "args": ["/path/to/memory/src/index.js"],
       "env": {
         "DATA_DIR": "/path/to/data"
       }
@@ -625,7 +712,7 @@ curl -X POST "http://localhost:3000/memories?store_id=abc-123" \
 Start the MCP HTTP server, then configure your client:
 
 ```bash
-bun run src/index.js --mcp-http
+node src/index.js --mcp-http
 ```
 
 ```json
@@ -670,10 +757,10 @@ src/
 
 ```bash
 # Run HTTP server with auto-reload
-bun --watch src/index.js -- --http
+node --watch src/index.js --http
 
 # Run tests in watch mode
-bun test --watch
+npx vitest --watch
 ```
 
 ## License

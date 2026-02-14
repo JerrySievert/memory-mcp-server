@@ -1,9 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Test Client for Memory Store HTTP API
  *
  * Tests the HTTP interface by adding data and reading it back.
- * Run with: bun run src/test-client.js
+ * Run with: node src/test-client.js
  */
 
 const BASE_URL = process.env.API_URL || 'http://localhost:3000';
@@ -27,7 +27,9 @@ async function api(method, path, body = null) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(`API error ${response.status}: ${data.error || JSON.stringify(data)}`);
+    throw new Error(
+      `API error ${response.status}: ${data.error || JSON.stringify(data)}`
+    );
   }
 
   return data;
@@ -101,7 +103,8 @@ async function run_tests() {
     {
       category: 'work',
       type: 'project',
-      content: 'Working on a memory store project with append-only architecture',
+      content:
+        'Working on a memory store project with append-only architecture',
       tags: ['development', 'architecture'],
       importance: 8
     },
@@ -119,7 +122,9 @@ async function run_tests() {
   for (const memory_data of memories_to_add) {
     const memory = await api('POST', '/memories', memory_data);
     added_memories.push(memory);
-    log_success(`Added memory: ${memory.id.slice(0, 8)}... - "${memory_data.content.slice(0, 40)}..."`);
+    log_success(
+      `Added memory: ${memory.id.slice(0, 8)}... - "${memory_data.content.slice(0, 40)}..."`
+    );
   }
 
   log_result('First added memory (full)', added_memories[0]);
@@ -132,7 +137,10 @@ async function run_tests() {
   // Read individual memory
   const first_memory_id = added_memories[0].id;
   const fetched_memory = await api('GET', `/memories/${first_memory_id}`);
-  log_result(`Fetched memory ${first_memory_id.slice(0, 8)}...`, fetched_memory);
+  log_result(
+    `Fetched memory ${first_memory_id.slice(0, 8)}...`,
+    fetched_memory
+  );
 
   // Verify content matches
   if (fetched_memory.content === added_memories[0].content) {
@@ -145,11 +153,14 @@ async function run_tests() {
 
   // List all memories
   const all_memories = await api('GET', '/memories');
-  log_result(`Listed ${all_memories.length} memories`, all_memories.map(m => ({
-    id: m.id.slice(0, 8) + '...',
-    category: m.category,
-    content: m.content.slice(0, 50) + '...'
-  })));
+  log_result(
+    `Listed ${all_memories.length} memories`,
+    all_memories.map((m) => ({
+      id: m.id.slice(0, 8) + '...',
+      category: m.category,
+      content: m.content.slice(0, 50) + '...'
+    }))
+  );
 
   // -------------------------------------------------------------------------
   // Search Memories
@@ -162,11 +173,14 @@ async function run_tests() {
     mode: 'text',
     limit: 5
   });
-  log_result('Text search for "dark mode"', text_search.map(m => ({
-    id: m.id.slice(0, 8) + '...',
-    content: m.content.slice(0, 50) + '...',
-    score: m.score
-  })));
+  log_result(
+    'Text search for "dark mode"',
+    text_search.map((m) => ({
+      id: m.id.slice(0, 8) + '...',
+      content: m.content.slice(0, 50) + '...',
+      score: m.score
+    }))
+  );
 
   // Hybrid search
   const hybrid_search = await api('POST', '/memories/search', {
@@ -174,13 +188,16 @@ async function run_tests() {
     mode: 'hybrid',
     limit: 5
   });
-  log_result('Hybrid search for "user preferences and settings"', hybrid_search.map(m => ({
-    id: m.id.slice(0, 8) + '...',
-    content: m.content.slice(0, 50) + '...',
-    score: m.score,
-    semanticScore: m.semanticScore,
-    textScore: m.textScore
-  })));
+  log_result(
+    'Hybrid search for "user preferences and settings"',
+    hybrid_search.map((m) => ({
+      id: m.id.slice(0, 8) + '...',
+      content: m.content.slice(0, 50) + '...',
+      score: m.score,
+      semanticScore: m.semanticScore,
+      textScore: m.textScore
+    }))
+  );
 
   // -------------------------------------------------------------------------
   // Add Relationships
@@ -196,15 +213,21 @@ async function run_tests() {
   log_result('Created relationship', relationship);
 
   // Get relationships for first memory
-  const relationships = await api('GET', `/memories/${added_memories[0].id}/relationships`);
+  const relationships = await api(
+    'GET',
+    `/memories/${added_memories[0].id}/relationships`
+  );
   log_result('Relationships for first memory', relationships);
 
   // Get related memories
   const related = await api('GET', `/memories/${added_memories[0].id}/related`);
-  log_result('Related memories', related.map(m => ({
-    id: m.id.slice(0, 8) + '...',
-    content: m.content.slice(0, 50) + '...'
-  })));
+  log_result(
+    'Related memories',
+    related.map((m) => ({
+      id: m.id.slice(0, 8) + '...',
+      content: m.content.slice(0, 50) + '...'
+    }))
+  );
 
   // -------------------------------------------------------------------------
   // Update Memory
@@ -212,14 +235,18 @@ async function run_tests() {
   log_section('7. Updating Memory');
 
   const updated_memory = await api('PUT', `/memories/${first_memory_id}`, {
-    content: 'User strongly prefers dark mode in all applications, especially IDEs',
+    content:
+      'User strongly prefers dark mode in all applications, especially IDEs',
     importance: 9
   });
   log_result('Updated memory', updated_memory);
 
   // Verify update
   const refetched = await api('GET', `/memories/${first_memory_id}`);
-  if (refetched.content.includes('strongly prefers') && refetched.importance === 9) {
+  if (
+    refetched.content.includes('strongly prefers') &&
+    refetched.importance === 9
+  ) {
     log_success('Memory updated correctly');
   } else {
     log_error('Memory update verification failed');
@@ -234,8 +261,12 @@ async function run_tests() {
   log_result('Final store stats', final_stats);
 
   console.log('\nComparison:');
-  console.log(`  Memories: ${initial_stats.memoryCount} -> ${final_stats.memoryCount}`);
-  console.log(`  Relationships: ${initial_stats.relationshipCount} -> ${final_stats.relationshipCount}`);
+  console.log(
+    `  Memories: ${initial_stats.memoryCount} -> ${final_stats.memoryCount}`
+  );
+  console.log(
+    `  Relationships: ${initial_stats.relationshipCount} -> ${final_stats.relationshipCount}`
+  );
 
   // -------------------------------------------------------------------------
   // Debug Endpoints
@@ -243,19 +274,25 @@ async function run_tests() {
   log_section('9. Debug Endpoints');
 
   const debug_stores = await api('GET', '/debug/stores');
-  log_result('Debug stores overview', debug_stores.stores.map(s => ({
-    id: s.id.slice(0, 8) + (s.id.length > 8 ? '...' : ''),
-    name: s.name,
-    type: s.type,
-    memoryCount: s.memoryCount,
-    relationshipCount: s.relationshipCount
-  })));
+  log_result(
+    'Debug stores overview',
+    debug_stores.stores.map((s) => ({
+      id: s.id.slice(0, 8) + (s.id.length > 8 ? '...' : ''),
+      name: s.name,
+      type: s.type,
+      memoryCount: s.memoryCount,
+      relationshipCount: s.relationshipCount
+    }))
+  );
 
   // Get detailed memories from debug endpoint
-  const debug_memories = await api('GET', '/debug/stores/main/memories?limit=10');
+  const debug_memories = await api(
+    'GET',
+    '/debug/stores/main/memories?limit=10'
+  );
   log_result('Debug memories (main store)', {
     count: debug_memories.count,
-    memories: debug_memories.memories.map(m => ({
+    memories: debug_memories.memories.map((m) => ({
       id: m.id.slice(0, 8) + '...',
       version: m.version,
       content: m.content.slice(0, 40) + '...',
@@ -286,7 +323,7 @@ async function run_tests() {
 
   // Check it shows up with includeArchived
   const archived_memories = await api('GET', '/memories?includeArchived=true');
-  const found_deleted = archived_memories.find(m => m.id === third_memory_id);
+  const found_deleted = archived_memories.find((m) => m.id === third_memory_id);
   if (found_deleted && found_deleted.archived) {
     log_success('Deleted memory found in archived list');
   }
@@ -324,7 +361,7 @@ Final state:
 }
 
 // Run tests
-run_tests().catch(err => {
+run_tests().catch((err) => {
   console.error('\nTest failed with error:', err.message);
   process.exit(1);
 });

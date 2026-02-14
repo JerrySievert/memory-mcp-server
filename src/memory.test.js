@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Test Suite for Memory MCP Server
  *
@@ -10,7 +10,7 @@
  * - Archiving
  * - Merging
  *
- * Run with: bun run src/test.js
+ * Run with: npx vitest run src/memory.test.js
  *
  * @module test
  */
@@ -22,13 +22,18 @@ import {
   beforeAll,
   afterAll,
   beforeEach
-} from 'bun:test';
+} from 'vitest';
 import { unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
 
 // Set test database path
-const TEST_DB_PATH = join(import.meta.dir, '..', 'data', 'test-memories.db');
-process.env.DATA_DIR = join(import.meta.dir, '..', 'data');
+const TEST_DB_PATH = join(
+  import.meta.dirname,
+  '..',
+  'data',
+  'test-memories.db'
+);
+process.env.DATA_DIR = join(import.meta.dirname, '..', 'data');
 
 // Clean up test database
 function cleanupTestDb() {
